@@ -4,7 +4,7 @@ import json
 import time
 import pytest
 import responses
-from src.webhook_sender import send_webhook, WebhookDeliveryError
+from webhook_sender import send_webhook, WebhookDeliveryError
 
 
 class TestSendWebhook:

@@ -1,5 +1,5 @@
 import pytest
-from src.email_parser import parse_email
+from email_parser import parse_email
 
 
 class TestParseEmail:

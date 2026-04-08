@@ -1,7 +1,7 @@
 import json
 import os
 import pytest
-from src.config import get_domain_config, DomainNotConfiguredError
+from config import get_domain_config, DomainNotConfiguredError
 
 
 class TestGetDomainConfig:

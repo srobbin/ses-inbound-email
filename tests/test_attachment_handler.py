@@ -1,7 +1,7 @@
 import boto3
 import pytest
 from moto import mock_aws
-from src.attachment_handler import upload_attachments
+from attachment_handler import upload_attachments
 
 
 class TestUploadAttachments:

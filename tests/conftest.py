@@ -1,8 +1,13 @@
+import sys
+from pathlib import Path
+
+# Add src/ to path so imports work the same as in Lambda
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
 import email
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
-from pathlib import Path
 import pytest
 
 

@@ -3,11 +3,11 @@ import logging
 import os
 import boto3
 
-from src.email_parser import parse_email
-from src.reply_stripper import strip_reply
-from src.attachment_handler import upload_attachments
-from src.config import get_domain_config, DomainNotConfiguredError
-from src.webhook_sender import send_webhook, WebhookDeliveryError
+from email_parser import parse_email
+from reply_stripper import strip_reply
+from attachment_handler import upload_attachments
+from config import get_domain_config, DomainNotConfiguredError
+from webhook_sender import send_webhook, WebhookDeliveryError
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)

@@ -3,7 +3,7 @@ import boto3
 import pytest
 import responses
 from moto import mock_aws
-from src.handler import lambda_handler
+from handler import lambda_handler
 
 
 def make_sns_event(s3_bucket, s3_key):

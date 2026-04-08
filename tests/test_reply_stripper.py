@@ -1,5 +1,5 @@
 import pytest
-from src.reply_stripper import strip_reply
+from reply_stripper import strip_reply
 
 
 class TestStripReply:
