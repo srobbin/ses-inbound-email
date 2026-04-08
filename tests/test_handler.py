@@ -63,6 +63,7 @@ class TestLambdaHandler:
         assert payload["subject"] == "Test Subject"
         assert payload["message-id"] == "<msg-002@example.com>"
         assert payload["in-reply-to"] == "<original@letterclub.org>"
+        assert payload["references"] == "<original@letterclub.org>"
         assert "body-html" in payload
         assert "body-plain" in payload
         assert "stripped-html" in payload
