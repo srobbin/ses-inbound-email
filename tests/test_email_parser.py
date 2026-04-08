@@ -63,3 +63,32 @@ class TestParseEmail:
         result = parse_email(simple_text_email)
 
         assert result["attachments"] == []
+
+    def test_extracts_non_image_attachments(self):
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from email.mime.base import MIMEBase
+        from email import encoders
+
+        msg = MIMEMultipart("mixed")
+        msg["From"] = "sender@example.com"
+        msg["To"] = "reply+123@letterclub.org"
+        msg["Subject"] = "PDF attached"
+        msg["Message-ID"] = "<msg-006@example.com>"
+
+        text_part = MIMEText("See attached PDF.", "plain")
+        msg.attach(text_part)
+
+        pdf_part = MIMEBase("application", "pdf")
+        pdf_part.set_payload(b"%PDF-1.4 fake pdf content")
+        encoders.encode_base64(pdf_part)
+        pdf_part.add_header("Content-Disposition", "attachment", filename="document.pdf")
+        msg.attach(pdf_part)
+
+        result = parse_email(msg.as_string())
+
+        assert len(result["attachments"]) == 1
+        att = result["attachments"][0]
+        assert att["filename"] == "document.pdf"
+        assert att["content-type"] == "application/pdf"
+        assert isinstance(att["content"], bytes)

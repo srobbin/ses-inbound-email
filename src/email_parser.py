@@ -22,18 +22,17 @@ def parse_email(raw_email: str) -> dict:
 
             # Inline or attached images/files
             if part.get_content_maintype() == "image" or "attachment" in content_disposition:
-                if part.get_content_maintype() == "image":
-                    payload = part.get_payload(decode=True)
-                    if payload:
-                        filename = part.get_filename() or "attachment"
-                        att = {
-                            "filename": filename,
-                            "content-type": content_type,
-                            "content": payload,
-                        }
-                        if content_id:
-                            att["content-id"] = content_id
-                        attachments.append(att)
+                payload = part.get_payload(decode=True)
+                if payload:
+                    filename = part.get_filename() or "attachment"
+                    att = {
+                        "filename": filename,
+                        "content-type": content_type,
+                        "content": payload,
+                    }
+                    if content_id:
+                        att["content-id"] = content_id
+                    attachments.append(att)
                 continue
 
             if content_type == "text/plain" and body_plain is None:
