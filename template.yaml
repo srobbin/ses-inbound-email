@@ -92,6 +92,11 @@ Resources:
             BucketName: !Ref IncomingEmailBucket
         - S3CrudPolicy:
             BucketName: !Ref AttachmentBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendRawEmail
+              Resource: "*"
       Events:
         EmailNotification:
           Type: SNS

@@ -34,6 +34,16 @@ def lambda_handler(event, context):
         domain = parsed["domain"]
         config = get_domain_config(domain)
 
+        # Check if this email should be forwarded
+        forwards = config.get("forwards")
+        if forwards:
+            from forwarder import check_forward, forward_email
+            destination = check_forward(parsed["recipient"], forwards)
+            if destination:
+                forward_email(raw_email, parsed["recipient"], destination, region)
+                logger.info(f"Forwarded {parsed['recipient']} to {destination}, skipping webhook")
+                return {"statusCode": 200, "body": "Forwarded"}
+
         # Strip replies
         stripped = strip_reply(text=parsed["body-plain"], html=parsed["body-html"])
 

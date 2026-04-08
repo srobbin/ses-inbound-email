@@ -1,0 +1,13 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "ses-inbound-email"
+resolve_s3 = true
+s3_prefix = "ses-inbound-email"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "DomainConfig='{\"letterclub.org\": {\"webhook_url\": \"https://robbinco.ngrok.io/webhooks/inbound\", \"signing_secret\": \"4a4f49182b170b0be9887d67426f8c4a01eee98401f1cbdda77c2c0bafe1ff4c\", \"forwards\": {\"admin|administrator|billing|contact|help|info|mail|moderator|hostmaster|newsletter|no-reply|noreply|notification|notifications|notify|postmaster|privacy|security|support|system|webmaster\": \"scott@robbin.co\"}}}'"
+
+[default.build.parameters]
+cached = true
