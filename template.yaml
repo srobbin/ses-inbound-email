@@ -1,0 +1,116 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Reusable inbound email gateway. Receives emails via SES, parses them,
+  strips quoted replies, and POSTs JSON payloads to configured webhook URLs.
+
+Parameters:
+  DomainConfig:
+    Type: String
+    Description: >
+      JSON mapping of domain to webhook config.
+      Example: {"letterclub.org": {"webhook_url": "https://...", "signing_secret": "..."}}
+
+Globals:
+  Function:
+    Timeout: 60
+    MemorySize: 256
+    Runtime: python3.13
+
+Resources:
+  IncomingEmailBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-incoming-emails"
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldEmails
+            Status: Enabled
+            ExpirationInDays: 30
+
+  IncomingEmailBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref IncomingEmailBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowSESPut
+            Effect: Allow
+            Principal:
+              Service: ses.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub "${IncomingEmailBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                "AWS:SourceAccount": !Ref "AWS::AccountId"
+
+  AttachmentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-attachments"
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldAttachments
+            Status: Enabled
+            ExpirationInDays: 7
+
+  EmailNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${AWS::StackName}-email-notifications"
+
+  EmailNotificationTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref EmailNotificationTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowSESPublish
+            Effect: Allow
+            Principal:
+              Service: ses.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref EmailNotificationTopic
+            Condition:
+              StringEquals:
+                "AWS:SourceAccount": !Ref "AWS::AccountId"
+
+  InboundEmailFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handler.lambda_handler
+      Environment:
+        Variables:
+          DOMAIN_CONFIG: !Ref DomainConfig
+          ATTACHMENT_BUCKET: !Ref AttachmentBucket
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref IncomingEmailBucket
+        - S3CrudPolicy:
+            BucketName: !Ref AttachmentBucket
+      Events:
+        EmailNotification:
+          Type: SNS
+          Properties:
+            Topic: !Ref EmailNotificationTopic
+
+Outputs:
+  IncomingEmailBucketName:
+    Description: S3 bucket for raw incoming emails (configure in SES receipt rule)
+    Value: !Ref IncomingEmailBucket
+
+  EmailNotificationTopicArn:
+    Description: SNS topic ARN (configure in SES receipt rule)
+    Value: !Ref EmailNotificationTopic
+
+  AttachmentBucketName:
+    Description: S3 bucket for uploaded attachments
+    Value: !Ref AttachmentBucket
+
+  FunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt InboundEmailFunction.Arn
