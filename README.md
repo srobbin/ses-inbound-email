@@ -129,7 +129,47 @@ pytest tests/ -v
 
 ## Adding a Domain
 
-1. Add an entry to the `DOMAIN_CONFIG` JSON in `samconfig.toml`
-2. Deploy: `sam build && sam deploy`
-3. Add an SES receipt rule for the new domain
-4. Point the domain's MX record to SES
+A helper script automates SES setup for a new domain:
+
+```bash
+./scripts/add-domain.sh yourdomain.com
+```
+
+This will:
+
+1. Create an SES email identity for the domain
+2. Print the 3 DKIM CNAME records to add to your DNS
+3. Wait for SES to verify the domain
+4. Create an SES receipt rule to route inbound email to the Lambda
+
+After the script completes, you still need to:
+
+1. **Add DNS records** — the 3 DKIM CNAMEs (printed by the script)
+2. **Add domain to Lambda config** — add an entry to `DOMAIN_CONFIG` in `samconfig.toml`:
+   ```json
+   {
+     "yourdomain.com": {
+       "webhook_url": "https://yourdomain.com/webhooks/inbound",
+       "signing_secret": "generated-by-script",
+       "forwards": {
+         "admin|support": "you@example.com"
+       }
+     }
+   }
+   ```
+3. **Deploy** — `sam build && sam deploy`
+4. **Point MX record to SES** — add to your DNS:
+   ```
+   MX 10 inbound-smtp.us-east-1.amazonaws.com
+   ```
+
+### Manual setup
+
+If you prefer to set up manually or need to customize the process:
+
+1. Create SES identity: `aws sesv2 create-email-identity --email-identity yourdomain.com --region us-east-1`
+2. Add the 3 DKIM CNAME records to DNS (from the command output)
+3. Wait for verification: `aws sesv2 get-email-identity --email-identity yourdomain.com --region us-east-1`
+4. Create a receipt rule (see `scripts/add-domain.sh` for the exact command)
+5. Add domain to `DOMAIN_CONFIG` in `samconfig.toml` and deploy
+6. Point MX record to SES
