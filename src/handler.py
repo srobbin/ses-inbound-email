@@ -17,9 +17,14 @@ def lambda_handler(event, context):
     try:
         # Extract S3 info from SNS > SES notification
         sns_message = json.loads(event["Records"][0]["Sns"]["Message"])
-        action = sns_message["receipt"]["action"]
-        email_bucket = action["bucketName"]
-        email_key = action["objectKey"]
+        logger.info(f"SES notification action: {json.dumps(sns_message['receipt']['action'])}")
+
+        # The receipt.action reflects whichever action triggered this notification.
+        # When the SNS action triggers the Lambda, it contains the SNS action type
+        # (not the S3 action). Construct the S3 key from mail.messageId instead.
+        mail_message_id = sns_message["mail"]["messageId"]
+        email_bucket = os.environ.get("INCOMING_EMAIL_BUCKET")
+        email_key = f"emails/{mail_message_id}"
 
         # Fetch raw email from S3
         region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")

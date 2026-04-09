@@ -6,14 +6,16 @@ from moto import mock_aws
 from handler import lambda_handler
 
 
-def make_sns_event(s3_bucket, s3_key):
+def make_sns_event(message_id):
     ses_notification = {
         "notificationType": "Received",
+        "mail": {
+            "messageId": message_id,
+        },
         "receipt": {
             "action": {
-                "type": "S3",
-                "bucketName": s3_bucket,
-                "objectKey": s3_key,
+                "type": "SNS",
+                "topicArn": "arn:aws:sns:us-east-1:123456789:ses-inbound-email-notifications",
             }
         },
     }
@@ -45,12 +47,13 @@ class TestLambdaHandler:
         # Set up env
         monkeypatch.setenv("DOMAIN_CONFIG", json.dumps(domain_config))
         monkeypatch.setenv("ATTACHMENT_BUCKET", "ses-email-attachments")
+        monkeypatch.setenv("INCOMING_EMAIL_BUCKET", "ses-incoming-emails")
         monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
         # Mock webhook endpoint
         responses.add(responses.POST, "https://letterclub.org/webhooks/inbound", status=201)
 
-        event = make_sns_event("ses-incoming-emails", "emails/abc123")
+        event = make_sns_event("abc123")
         result = lambda_handler(event, None)
 
         assert result["statusCode"] == 200
@@ -84,11 +87,12 @@ class TestLambdaHandler:
 
         monkeypatch.setenv("DOMAIN_CONFIG", json.dumps(domain_config))
         monkeypatch.setenv("ATTACHMENT_BUCKET", "ses-email-attachments")
+        monkeypatch.setenv("INCOMING_EMAIL_BUCKET", "ses-incoming-emails")
         monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
         responses.add(responses.POST, "https://letterclub.org/webhooks/inbound", status=201)
 
-        event = make_sns_event("ses-incoming-emails", "emails/att123")
+        event = make_sns_event("att123")
         result = lambda_handler(event, None)
 
         assert result["statusCode"] == 200
@@ -121,9 +125,10 @@ class TestLambdaHandler:
 
         monkeypatch.setenv("DOMAIN_CONFIG", '{"letterclub.org": {"webhook_url": "https://letterclub.org/webhooks/inbound", "signing_secret": "secret"}}')
         monkeypatch.setenv("ATTACHMENT_BUCKET", "ses-email-attachments")
+        monkeypatch.setenv("INCOMING_EMAIL_BUCKET", "ses-incoming-emails")
         monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
-        event = make_sns_event("ses-incoming-emails", "emails/unknown")
+        event = make_sns_event("unknown")
         result = lambda_handler(event, None)
 
         assert result["statusCode"] == 400

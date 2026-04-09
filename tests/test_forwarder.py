@@ -61,11 +61,10 @@ class TestForwardEmail:
         # The key test is that it doesn't raise
 
     @mock_aws
-    def test_sets_x_original_to_header(self, simple_text_email):
+    def test_preserves_original_to_header(self, simple_text_email):
         ses = boto3.client("ses", region_name="us-east-1")
         ses.verify_email_identity(EmailAddress="sender@example.com")
 
-        # We can't easily inspect the sent email in moto, so test the email manipulation directly
         import email as email_lib
         msg = email_lib.message_from_string(simple_text_email)
         original_to = msg["To"]
@@ -77,4 +76,7 @@ class TestForwardEmail:
             region="us-east-1",
         )
 
-        # Test passes if no exception - SES accepted the email
+        # The original To header should remain unchanged in the message
+        # (only the envelope destination changes for routing)
+        msg_after = email_lib.message_from_string(simple_text_email)
+        assert msg_after["To"] == original_to

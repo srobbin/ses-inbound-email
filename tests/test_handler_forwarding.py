@@ -6,14 +6,16 @@ from moto import mock_aws
 from handler import lambda_handler
 
 
-def make_sns_event(s3_bucket, s3_key):
+def make_sns_event(message_id):
     ses_notification = {
         "notificationType": "Received",
+        "mail": {
+            "messageId": message_id,
+        },
         "receipt": {
             "action": {
-                "type": "S3",
-                "bucketName": s3_bucket,
-                "objectKey": s3_key,
+                "type": "SNS",
+                "topicArn": "arn:aws:sns:us-east-1:123456789:ses-inbound-email-notifications",
             }
         },
     }
@@ -64,9 +66,10 @@ class TestHandlerForwarding:
         }
         monkeypatch.setenv("DOMAIN_CONFIG", json.dumps(domain_config))
         monkeypatch.setenv("ATTACHMENT_BUCKET", "ses-email-attachments")
+        monkeypatch.setenv("INCOMING_EMAIL_BUCKET", "ses-incoming-emails")
         monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
-        event = make_sns_event("ses-incoming-emails", "emails/admin-test")
+        event = make_sns_event("admin-test")
         result = lambda_handler(event, None)
 
         assert result["statusCode"] == 200
@@ -103,11 +106,12 @@ class TestHandlerForwarding:
         }
         monkeypatch.setenv("DOMAIN_CONFIG", json.dumps(domain_config))
         monkeypatch.setenv("ATTACHMENT_BUCKET", "ses-email-attachments")
+        monkeypatch.setenv("INCOMING_EMAIL_BUCKET", "ses-incoming-emails")
         monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
         responses.add(responses.POST, "https://letterclub.org/webhooks/inbound", status=201)
 
-        event = make_sns_event("ses-incoming-emails", "emails/reply-test")
+        event = make_sns_event("reply-test")
         result = lambda_handler(event, None)
 
         assert result["statusCode"] == 200
@@ -142,11 +146,12 @@ class TestHandlerForwarding:
         }
         monkeypatch.setenv("DOMAIN_CONFIG", json.dumps(domain_config))
         monkeypatch.setenv("ATTACHMENT_BUCKET", "ses-email-attachments")
+        monkeypatch.setenv("INCOMING_EMAIL_BUCKET", "ses-incoming-emails")
         monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
         responses.add(responses.POST, "https://noforward.com/webhooks/inbound", status=201)
 
-        event = make_sns_event("ses-incoming-emails", "emails/nf-test")
+        event = make_sns_event("nf-test")
         result = lambda_handler(event, None)
 
         assert result["statusCode"] == 200

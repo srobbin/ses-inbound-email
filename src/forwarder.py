@@ -25,16 +25,11 @@ def forward_email(raw_email: str, recipient: str, destination: str, region: str)
     from email.utils import parseaddr
 
     msg = email_lib.message_from_string(raw_email)
-    original_to = msg["To"]
     original_from = parseaddr(msg["From"])[1]
 
-    # Replace To with the forwarding destination
-    del msg["To"]
-    msg["To"] = destination
-
-    # Add X-Original-To header so the recipient knows who it was originally sent to
-    msg["X-Original-To"] = original_to
-
+    # Keep the original To header (e.g. support@letterclub.org) so the
+    # recipient can see who the email was originally addressed to.
+    # Only the envelope destination is changed to route delivery.
     ses = boto3.client("ses", region_name=region)
     ses.send_raw_email(
         Source=original_from,

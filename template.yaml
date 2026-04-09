@@ -87,6 +87,7 @@ Resources:
         Variables:
           DOMAIN_CONFIG: !Ref DomainConfig
           ATTACHMENT_BUCKET: !Ref AttachmentBucket
+          INCOMING_EMAIL_BUCKET: !Ref IncomingEmailBucket
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref IncomingEmailBucket
