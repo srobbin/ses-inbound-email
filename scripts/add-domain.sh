@@ -8,6 +8,7 @@ set -euo pipefail
 # 2. Prints the 3 CNAME records you need to add to DNS
 # 3. Waits for SES to verify the domain
 # 4. Adds an SES receipt rule for the domain
+# 5. Generates a signing secret and stores it in SSM Parameter Store
 #
 # After running this script, you still need to:
 # - Add the domain to DOMAIN_CONFIG in samconfig.toml and redeploy
@@ -127,14 +128,36 @@ aws ses create-receipt-rule \
     \"ScanEnabled\": true
   }" 2>&1 || echo "    Rule may already exist — check with: aws ses describe-active-receipt-rule-set --region ${REGION}"
 
+# Step 5: Generate signing secret and store in SSM Parameter Store
+echo ""
+echo "==> Generating signing secret and storing in SSM Parameter Store..."
+
+SSM_PARAM_NAME="/ses-inbound-email/${DOMAIN}/signing-secret"
+
+if aws ssm get-parameter --name "${SSM_PARAM_NAME}" --region "${REGION}" > /dev/null 2>&1; then
+  echo "    SSM parameter ${SSM_PARAM_NAME} already exists — skipping. Use --overwrite manually to rotate."
+else
+  SIGNING_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+  aws ssm put-parameter \
+    --name "${SSM_PARAM_NAME}" \
+    --value "${SIGNING_SECRET}" \
+    --type SecureString \
+    --description "HMAC signing secret for ${DOMAIN} inbound webhook" \
+    --region "${REGION}" > /dev/null
+  echo "    Stored at ${SSM_PARAM_NAME}"
+  echo "    You'll need to copy this value into the consumer that verifies the webhook signature:"
+  echo "    ${SIGNING_SECRET}"
+  echo "    (It will not be printed again. Retrieve later with:"
+  echo "     aws ssm get-parameter --name ${SSM_PARAM_NAME} --with-decryption --region ${REGION})"
+fi
+
 echo ""
 echo "==> Done! Next steps:"
 echo ""
 echo "    1. Add ${DOMAIN} to DOMAIN_CONFIG in samconfig.toml:"
 echo ""
 echo "       \"${DOMAIN}\": {"
-echo "         \"webhook_url\": \"https://${DOMAIN}/webhooks/inbound\","
-echo "         \"signing_secret\": \"$(python3 -c 'import secrets; print(secrets.token_hex(32))')\""
+echo "         \"webhook_url\": \"https://${DOMAIN}/webhooks/inbound\""
 echo "       }"
 echo ""
 echo "    2. Deploy: sam build && sam deploy"

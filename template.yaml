@@ -8,8 +8,12 @@ Parameters:
   DomainConfig:
     Type: String
     Description: >
-      JSON mapping of domain to webhook config.
-      Example: {"letterclub.org": {"webhook_url": "https://...", "signing_secret": "..."}}
+      JSON mapping of domain to webhook config. Each entry must have a
+      webhook_url. The signing_secret is fetched at runtime from SSM
+      Parameter Store under /ses-inbound-email/<domain>/signing-secret,
+      not included here. Optional forwards key maps local-part regex to
+      destination address.
+      Example: {"letterclub.org": {"webhook_url": "https://..."}}
 
 Globals:
   Function:
@@ -98,6 +102,17 @@ Resources:
               Action:
                 - ses:SendRawEmail
               Resource: "*"
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ses-inbound-email/*"
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+              Resource: "*"
+              Condition:
+                StringEquals:
+                  "kms:ViaService": !Sub "ssm.${AWS::Region}.amazonaws.com"
       Events:
         EmailNotification:
           Type: SNS
