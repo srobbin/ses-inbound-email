@@ -47,42 +47,24 @@ Also verify the domain in SES (DKIM + SPF) for outbound sending (required for fo
 
 ## Configuration
 
-Configuration lives in two places: a JSON env var for non-secret per-domain settings, and SSM Parameter Store (SecureString) for each domain's signing secret.
-
-### `DOMAIN_CONFIG` env var
-
-The Lambda reads a `DOMAIN_CONFIG` environment variable — a JSON object mapping domains to their non-secret settings. Each domain must have a `webhook_url`. The `forwards` key is optional.
+The Lambda reads a `DOMAIN_CONFIG` environment variable — a JSON object mapping domains to their settings. Each domain must have a `webhook_url` and `signing_secret`. The `forwards` key is optional.
 
 ```json
 {
   "yourdomain.com": {
     "webhook_url": "https://yourdomain.com/webhooks/inbound",
+    "signing_secret": "your-secret-key",
     "forwards": {
       "admin|support|billing": "you@example.com",
       "sales|partnerships": "sales@example.com"
     }
   },
   "another-app.com": {
-    "webhook_url": "https://another-app.com/webhooks/inbound"
+    "webhook_url": "https://another-app.com/webhooks/inbound",
+    "signing_secret": "another-secret"
   }
 }
 ```
-
-### Signing secret in SSM Parameter Store
-
-The HMAC signing secret for each domain lives in SSM Parameter Store as a SecureString, *not* in `DOMAIN_CONFIG`. The Lambda fetches it at runtime based on the recipient domain.
-
-Store the secret under `/ses-inbound-email/<domain>/signing-secret`:
-
-```bash
-aws ssm put-parameter \
-  --name "/ses-inbound-email/yourdomain.com/signing-secret" \
-  --value "$(openssl rand -hex 32)" \
-  --type SecureString \
-  --region us-east-1
-```
-
-This keeps secret material out of git and out of Lambda environment variables. Rotation is a matter of running the above command with `--overwrite` and updating the consumer that verifies the signature.
 
 ### Forwarding
 
@@ -168,13 +150,13 @@ After the script completes, you still need to:
    {
      "yourdomain.com": {
        "webhook_url": "https://yourdomain.com/webhooks/inbound",
+       "signing_secret": "generated-by-script",
        "forwards": {
          "admin|support": "you@example.com"
        }
      }
    }
    ```
-   The script already put the signing secret in SSM Parameter Store — no further action needed for that.
 3. **Deploy** — `sam build && sam deploy`
 4. **Point MX record to SES** — add to your DNS:
    ```

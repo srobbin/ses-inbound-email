@@ -7,7 +7,6 @@ from email_parser import parse_email
 from reply_stripper import strip_reply
 from attachment_handler import upload_attachments
 from config import get_domain_config, DomainNotConfiguredError
-from signing_secrets import get_signing_secret, SigningSecretNotFoundError
 from webhook_sender import send_webhook, WebhookDeliveryError
 
 logger = logging.getLogger()
@@ -72,8 +71,8 @@ def lambda_handler(event, context):
             "attachments": uploaded_attachments,
         }
 
-        # Send webhook — signing secret comes from SSM, not DOMAIN_CONFIG
-        send_webhook(config["webhook_url"], payload, get_signing_secret(domain))
+        # Send webhook
+        send_webhook(config["webhook_url"], payload, config["signing_secret"])
 
         logger.info(f"Processed email from {parsed['sender']} to {parsed['recipient']}")
         return {"statusCode": 200, "body": "OK"}
@@ -81,10 +80,6 @@ def lambda_handler(event, context):
     except DomainNotConfiguredError as e:
         logger.warning(f"Domain not configured: {e}")
         return {"statusCode": 400, "body": str(e)}
-
-    except SigningSecretNotFoundError as e:
-        logger.error(f"Signing secret not found: {e}")
-        return {"statusCode": 500, "body": str(e)}
 
     except WebhookDeliveryError as e:
         logger.error(f"Webhook delivery failed: {e}")

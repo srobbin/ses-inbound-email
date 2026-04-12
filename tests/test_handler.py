@@ -50,14 +50,6 @@ class TestLambdaHandler:
         monkeypatch.setenv("INCOMING_EMAIL_BUCKET", "ses-incoming-emails")
         monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
-        # Set up signing secret in mock SSM
-        ssm = boto3.client("ssm", region_name="us-east-1")
-        ssm.put_parameter(
-            Name="/ses-inbound-email/letterclub.org/signing-secret",
-            Value="test-secret-key",
-            Type="SecureString",
-        )
-
         # Mock webhook endpoint
         responses.add(responses.POST, "https://letterclub.org/webhooks/inbound", status=201)
 
@@ -97,13 +89,6 @@ class TestLambdaHandler:
         monkeypatch.setenv("ATTACHMENT_BUCKET", "ses-email-attachments")
         monkeypatch.setenv("INCOMING_EMAIL_BUCKET", "ses-incoming-emails")
         monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
-
-        ssm = boto3.client("ssm", region_name="us-east-1")
-        ssm.put_parameter(
-            Name="/ses-inbound-email/letterclub.org/signing-secret",
-            Value="test-secret-key",
-            Type="SecureString",
-        )
 
         responses.add(responses.POST, "https://letterclub.org/webhooks/inbound", status=201)
 

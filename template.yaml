@@ -8,19 +8,8 @@ Parameters:
   DomainConfig:
     Type: String
     Description: >
-      JSON mapping of domain to webhook config. Each entry must have a
-      webhook_url. The signing_secret is fetched at runtime from SSM
-      Parameter Store under /ses-inbound-email/<domain>/signing-secret,
-      not included here. Optional forwards key maps local-part regex to
-      destination address.
-      Example: {"letterclub.org": {"webhook_url": "https://..."}}
-
-  AlertEmail:
-    Type: String
-    Description: >
-      Email address that receives CloudWatch alarm notifications for SES
-      deliverability (bounce/complaint rates) and Lambda failures. The
-      subscription requires a one-time click-through confirmation.
+      JSON mapping of domain to webhook config.
+      Example: {"letterclub.org": {"webhook_url": "https://...", "signing_secret": "..."}}
 
 Globals:
   Function:
@@ -89,20 +78,11 @@ Resources:
               StringEquals:
                 "AWS:SourceAccount": !Ref "AWS::AccountId"
 
-  InboundEmailDLQ:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub "${AWS::StackName}-inbound-dlq"
-      MessageRetentionPeriod: 1209600  # 14 days, SQS max
-
   InboundEmailFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/
       Handler: handler.lambda_handler
-      DeadLetterQueue:
-        Type: SQS
-        TargetArn: !GetAtt InboundEmailDLQ.Arn
       Environment:
         Variables:
           DOMAIN_CONFIG: !Ref DomainConfig
@@ -118,126 +98,11 @@ Resources:
               Action:
                 - ses:SendRawEmail
               Resource: "*"
-            - Effect: Allow
-              Action:
-                - ssm:GetParameter
-              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ses-inbound-email/*"
-            - Effect: Allow
-              Action:
-                - kms:Decrypt
-              Resource: "*"
-              Condition:
-                StringEquals:
-                  "kms:ViaService": !Sub "ssm.${AWS::Region}.amazonaws.com"
       Events:
         EmailNotification:
           Type: SNS
           Properties:
             Topic: !Ref EmailNotificationTopic
-
-  SesAlertsTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      TopicName: !Sub "${AWS::StackName}-alerts"
-
-  SesAlertsEmailSubscription:
-    Type: AWS::SNS::Subscription
-    Properties:
-      TopicArn: !Ref SesAlertsTopic
-      Protocol: email
-      Endpoint: !Ref AlertEmail
-
-  # Account-level SES outbound reputation — AWS publishes these automatically;
-  # no configuration set required. Thresholds are well below the AWS review
-  # thresholds (5% bounce, 0.1% complaint) so we get warning, not suspension.
-  SESBounceRateHighAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub "${AWS::StackName}-ses-bounce-rate-high"
-      AlarmDescription: "SES account-level bounce rate above 2%. AWS reviews at 5%, suspends at 10%."
-      Namespace: AWS/SES
-      MetricName: Reputation.BounceRate
-      Statistic: Average
-      Period: 900
-      EvaluationPeriods: 1
-      Threshold: 0.02
-      ComparisonOperator: GreaterThanThreshold
-      TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref SesAlertsTopic
-
-  SESComplaintRateHighAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub "${AWS::StackName}-ses-complaint-rate-high"
-      AlarmDescription: "SES account-level complaint rate above 0.05%. AWS reviews at 0.1%, suspends at 0.5%."
-      Namespace: AWS/SES
-      MetricName: Reputation.ComplaintRate
-      Statistic: Average
-      Period: 900
-      EvaluationPeriods: 1
-      Threshold: 0.0005
-      ComparisonOperator: GreaterThanThreshold
-      TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref SesAlertsTopic
-
-  InboundLambdaErrorsAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub "${AWS::StackName}-inbound-lambda-errors"
-      AlarmDescription: "Inbound email Lambda has logged one or more errors in the last 5 minutes."
-      Namespace: AWS/Lambda
-      MetricName: Errors
-      Dimensions:
-        - Name: FunctionName
-          Value: !Ref InboundEmailFunction
-      Statistic: Sum
-      Period: 300
-      EvaluationPeriods: 1
-      Threshold: 0
-      ComparisonOperator: GreaterThanThreshold
-      TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref SesAlertsTopic
-
-  InboundLambdaThrottlesAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub "${AWS::StackName}-inbound-lambda-throttles"
-      AlarmDescription: "Inbound email Lambda has been throttled in the last 5 minutes."
-      Namespace: AWS/Lambda
-      MetricName: Throttles
-      Dimensions:
-        - Name: FunctionName
-          Value: !Ref InboundEmailFunction
-      Statistic: Sum
-      Period: 300
-      EvaluationPeriods: 1
-      Threshold: 0
-      ComparisonOperator: GreaterThanThreshold
-      TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref SesAlertsTopic
-
-  InboundDLQHasMessagesAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub "${AWS::StackName}-inbound-dlq-has-messages"
-      AlarmDescription: "Inbound email DLQ has at least one message — a webhook delivery or parse failed after retries."
-      Namespace: AWS/SQS
-      MetricName: ApproximateNumberOfMessagesVisible
-      Dimensions:
-        - Name: QueueName
-          Value: !Sub "${AWS::StackName}-inbound-dlq"
-      Statistic: Maximum
-      Period: 300
-      EvaluationPeriods: 1
-      Threshold: 0
-      ComparisonOperator: GreaterThanThreshold
-      TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref SesAlertsTopic
 
 Outputs:
   IncomingEmailBucketName:
@@ -255,11 +120,3 @@ Outputs:
   FunctionArn:
     Description: Lambda function ARN
     Value: !GetAtt InboundEmailFunction.Arn
-
-  SesAlertsTopicArn:
-    Description: SNS topic ARN for CloudWatch alarm notifications
-    Value: !Ref SesAlertsTopic
-
-  InboundEmailDLQUrl:
-    Description: SQS DLQ for inbound email processing failures
-    Value: !Ref InboundEmailDLQ

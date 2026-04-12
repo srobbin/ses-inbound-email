@@ -51,10 +51,9 @@ class TestHandlerForwarding:
             Body=msg.as_string().encode(),
         )
 
-        # forwarder.py sends from info@<recipient-domain>, so that identity
-        # is what needs to be verified in moto.
+        # Verify sender in SES (required by moto)
         ses = boto3.client("ses", region_name="us-east-1")
-        ses.verify_email_identity(EmailAddress="info@letterclub.org")
+        ses.verify_email_identity(EmailAddress="someone@example.com")
 
         domain_config = {
             "letterclub.org": {
@@ -110,13 +109,6 @@ class TestHandlerForwarding:
         monkeypatch.setenv("INCOMING_EMAIL_BUCKET", "ses-incoming-emails")
         monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
-        ssm = boto3.client("ssm", region_name="us-east-1")
-        ssm.put_parameter(
-            Name="/ses-inbound-email/letterclub.org/signing-secret",
-            Value="test-secret-key",
-            Type="SecureString",
-        )
-
         responses.add(responses.POST, "https://letterclub.org/webhooks/inbound", status=201)
 
         event = make_sns_event("reply-test")
@@ -156,13 +148,6 @@ class TestHandlerForwarding:
         monkeypatch.setenv("ATTACHMENT_BUCKET", "ses-email-attachments")
         monkeypatch.setenv("INCOMING_EMAIL_BUCKET", "ses-incoming-emails")
         monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
-
-        ssm = boto3.client("ssm", region_name="us-east-1")
-        ssm.put_parameter(
-            Name="/ses-inbound-email/noforward.com/signing-secret",
-            Value="test-secret-key",
-            Type="SecureString",
-        )
 
         responses.add(responses.POST, "https://noforward.com/webhooks/inbound", status=201)
 
