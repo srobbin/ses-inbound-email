@@ -96,6 +96,48 @@ Resources:
         SnsDestination:
           TopicARN: !Ref EmailNotificationTopic
 
+  EmailDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-email-dlq"
+      MessageRetentionPeriod: 1209600  # 14 days
+
+  EmailQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-email-queue"
+      VisibilityTimeout: 300  # 5 minutes
+      MessageRetentionPeriod: 86400  # 1 day
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt EmailDeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  EmailQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref EmailQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowSNSPublish
+            Effect: Allow
+            Principal:
+              Service: sns.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt EmailQueue.Arn
+            Condition:
+              ArnEquals:
+                "aws:SourceArn": !Ref EmailNotificationTopic
+
+  EmailQueueSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: sqs
+      Endpoint: !GetAtt EmailQueue.Arn
+      TopicArn: !Ref EmailNotificationTopic
+      RawMessageDelivery: false
+
   InboundEmailFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -118,10 +160,11 @@ Resources:
                 - ses:SendRawEmail
               Resource: "*"
       Events:
-        EmailNotification:
-          Type: SNS
+        EmailQueue:
+          Type: SQS
           Properties:
-            Topic: !Ref EmailNotificationTopic
+            Queue: !GetAtt EmailQueue.Arn
+            BatchSize: 1
 
 Outputs:
   IncomingEmailBucketName:
@@ -135,6 +178,14 @@ Outputs:
   AttachmentBucketName:
     Description: S3 bucket for uploaded attachments
     Value: !Ref AttachmentBucket
+
+  EmailQueueUrl:
+    Description: SQS queue URL for email processing
+    Value: !Ref EmailQueue
+
+  EmailDeadLetterQueueUrl:
+    Description: DLQ URL for failed email processing
+    Value: !Ref EmailDeadLetterQueue
 
   FunctionArn:
     Description: Lambda function ARN

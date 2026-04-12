@@ -6,7 +6,7 @@ from moto import mock_aws
 from handler import lambda_handler
 
 
-def make_sns_event(message_id):
+def make_sqs_event(message_id):
     ses_notification = {
         "notificationType": "Received",
         "mail": {
@@ -19,12 +19,14 @@ def make_sns_event(message_id):
             }
         },
     }
+    sns_envelope = {
+        "Type": "Notification",
+        "Message": json.dumps(ses_notification),
+    }
     return {
         "Records": [
             {
-                "Sns": {
-                    "Message": json.dumps(ses_notification),
-                }
+                "body": json.dumps(sns_envelope),
             }
         ]
     }
@@ -69,7 +71,7 @@ class TestHandlerForwarding:
         monkeypatch.setenv("INCOMING_EMAIL_BUCKET", "ses-incoming-emails")
         monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
-        event = make_sns_event("admin-test")
+        event = make_sqs_event("admin-test")
         result = lambda_handler(event, None)
 
         assert result["statusCode"] == 200
@@ -111,7 +113,7 @@ class TestHandlerForwarding:
 
         responses.add(responses.POST, "https://letterclub.org/webhooks/inbound", status=201)
 
-        event = make_sns_event("reply-test")
+        event = make_sqs_event("reply-test")
         result = lambda_handler(event, None)
 
         assert result["statusCode"] == 200
@@ -151,7 +153,7 @@ class TestHandlerForwarding:
 
         responses.add(responses.POST, "https://noforward.com/webhooks/inbound", status=201)
 
-        event = make_sns_event("nf-test")
+        event = make_sqs_event("nf-test")
         result = lambda_handler(event, None)
 
         assert result["statusCode"] == 200

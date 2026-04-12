@@ -6,7 +6,7 @@ from moto import mock_aws
 from handler import lambda_handler
 
 
-def make_sns_event(message_id):
+def make_sqs_event(message_id):
     ses_notification = {
         "notificationType": "Received",
         "mail": {
@@ -19,12 +19,14 @@ def make_sns_event(message_id):
             }
         },
     }
+    sns_envelope = {
+        "Type": "Notification",
+        "Message": json.dumps(ses_notification),
+    }
     return {
         "Records": [
             {
-                "Sns": {
-                    "Message": json.dumps(ses_notification),
-                }
+                "body": json.dumps(sns_envelope),
             }
         ]
     }
@@ -53,7 +55,7 @@ class TestLambdaHandler:
         # Mock webhook endpoint
         responses.add(responses.POST, "https://letterclub.org/webhooks/inbound", status=201)
 
-        event = make_sns_event("abc123")
+        event = make_sqs_event("abc123")
         result = lambda_handler(event, None)
 
         assert result["statusCode"] == 200
@@ -93,7 +95,7 @@ class TestLambdaHandler:
 
         responses.add(responses.POST, "https://letterclub.org/webhooks/inbound", status=201)
 
-        event = make_sns_event("att123")
+        event = make_sqs_event("att123")
         result = lambda_handler(event, None)
 
         assert result["statusCode"] == 200
@@ -126,8 +128,12 @@ class TestLambdaHandler:
                 "timestamp": "2026-04-12T12:00:00.000Z",
             },
         }
+        sns_envelope = {
+            "Type": "Notification",
+            "Message": json.dumps(bounce_notification),
+        }
         event = {
-            "Records": [{"Sns": {"Message": json.dumps(bounce_notification)}}]
+            "Records": [{"body": json.dumps(sns_envelope)}]
         }
 
         result = lambda_handler(event, None)
@@ -161,7 +167,33 @@ class TestLambdaHandler:
         monkeypatch.setenv("INCOMING_EMAIL_BUCKET", "ses-incoming-emails")
         monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
-        event = make_sns_event("unknown")
+        event = make_sqs_event("unknown")
         result = lambda_handler(event, None)
 
         assert result["statusCode"] == 400
+
+    @mock_aws
+    @responses.activate
+    def test_webhook_failure_raises_for_sqs_retry(self, simple_html_email, domain_config, monkeypatch):
+        s3 = boto3.client("s3", region_name="us-east-1")
+        s3.create_bucket(Bucket="ses-incoming-emails")
+        s3.create_bucket(Bucket="ses-email-attachments")
+        s3.put_object(
+            Bucket="ses-incoming-emails",
+            Key="emails/retry123",
+            Body=simple_html_email.encode(),
+        )
+
+        monkeypatch.setenv("DOMAIN_CONFIG", json.dumps(domain_config))
+        monkeypatch.setenv("ATTACHMENT_BUCKET", "ses-email-attachments")
+        monkeypatch.setenv("INCOMING_EMAIL_BUCKET", "ses-incoming-emails")
+        monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+
+        # Simulate webhook returning 503
+        responses.add(responses.POST, "https://letterclub.org/webhooks/inbound", status=503)
+
+        from webhook_sender import WebhookDeliveryError
+
+        event = make_sqs_event("retry123")
+        with pytest.raises(WebhookDeliveryError):
+            lambda_handler(event, None)

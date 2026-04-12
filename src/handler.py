@@ -8,7 +8,7 @@ from reply_stripper import strip_reply
 from attachment_handler import upload_attachments
 from config import get_domain_config, DomainNotConfiguredError
 from notification_handler import handle_bounce, handle_complaint
-from webhook_sender import send_webhook, WebhookDeliveryError
+from webhook_sender import send_webhook
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -16,7 +16,9 @@ logger.setLevel(logging.INFO)
 
 def lambda_handler(event, context):
     try:
-        sns_message = json.loads(event["Records"][0]["Sns"]["Message"])
+        # SQS wraps the SNS message: parse SQS body, then SNS Message
+        sqs_body = json.loads(event["Records"][0]["body"])
+        sns_message = json.loads(sqs_body["Message"])
         notification_type = sns_message.get("notificationType")
 
         # Route bounce/complaint notifications to dedicated handlers
@@ -80,7 +82,7 @@ def lambda_handler(event, context):
             "attachments": uploaded_attachments,
         }
 
-        # Send webhook
+        # Send webhook — let WebhookDeliveryError propagate so SQS retries
         send_webhook(config["webhook_url"], payload, config["signing_secret"])
 
         logger.info(f"Processed email from {parsed['sender']} to {parsed['recipient']}")
@@ -89,11 +91,3 @@ def lambda_handler(event, context):
     except DomainNotConfiguredError as e:
         logger.warning(f"Domain not configured: {e}")
         return {"statusCode": 400, "body": str(e)}
-
-    except WebhookDeliveryError as e:
-        logger.error(f"Webhook delivery failed: {e}")
-        return {"statusCode": 502, "body": str(e)}
-
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}", exc_info=True)
-        return {"statusCode": 500, "body": str(e)}
