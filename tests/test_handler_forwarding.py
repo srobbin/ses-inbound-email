@@ -51,9 +51,9 @@ class TestHandlerForwarding:
             Body=msg.as_string().encode(),
         )
 
-        # Verify sender in SES (required by moto)
+        # Verify the forwarding identity in SES (forwarder sends from info@<recipient-domain>)
         ses = boto3.client("ses", region_name="us-east-1")
-        ses.verify_email_identity(EmailAddress="someone@example.com")
+        ses.verify_email_identity(EmailAddress="info@letterclub.org")
 
         domain_config = {
             "letterclub.org": {

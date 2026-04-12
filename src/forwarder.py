@@ -1,3 +1,4 @@
+import os
 import re
 import boto3
 import logging
@@ -52,10 +53,14 @@ def forward_email(raw_email: str, recipient: str, destination: str, region: str)
     msg["Reply-To"] = formataddr((original_name, original_from)) if original_name else original_from
 
     ses = boto3.client("ses", region_name=region)
-    ses.send_raw_email(
-        Source=source,
-        Destinations=[destination],
-        RawMessage={"Data": msg.as_string()},
-    )
+    send_kwargs = {
+        "Source": source,
+        "Destinations": [destination],
+        "RawMessage": {"Data": msg.as_string()},
+    }
+    config_set = os.environ.get("CONFIGURATION_SET_NAME")
+    if config_set:
+        send_kwargs["ConfigurationSetName"] = config_set
+    ses.send_raw_email(**send_kwargs)
 
     logger.info(f"Forwarded email from {original_from} to {destination} (original recipient: {recipient})")

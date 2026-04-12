@@ -61,6 +61,7 @@ class TestLambdaHandler:
         # Verify webhook was called
         assert len(responses.calls) == 1
         payload = json.loads(responses.calls[0].request.body)
+        assert payload["event"] == "inbound"
         assert payload["sender"] == "sender@example.com"
         assert payload["recipient"] == "reply+123@letterclub.org"
         assert payload["subject"] == "Test Subject"
@@ -103,6 +104,38 @@ class TestLambdaHandler:
         assert payload["attachments"][0]["content-type"] == "image/png"
         assert "url" in payload["attachments"][0]
         assert "content" not in payload["attachments"][0]
+
+    @responses.activate
+    def test_routes_bounce_notification_to_webhook(self, domain_config, monkeypatch):
+        monkeypatch.setenv("DOMAIN_CONFIG", json.dumps(domain_config))
+
+        responses.add(responses.POST, "https://letterclub.org/webhooks/inbound", status=200)
+
+        bounce_notification = {
+            "notificationType": "Bounce",
+            "mail": {
+                "source": "info@letterclub.org",
+                "messageId": "bounce-001",
+            },
+            "bounce": {
+                "bounceType": "Permanent",
+                "bounceSubType": "General",
+                "bouncedRecipients": [
+                    {"emailAddress": "user@example.com", "diagnosticCode": "550 unknown"}
+                ],
+                "timestamp": "2026-04-12T12:00:00.000Z",
+            },
+        }
+        event = {
+            "Records": [{"Sns": {"Message": json.dumps(bounce_notification)}}]
+        }
+
+        result = lambda_handler(event, None)
+
+        assert result["statusCode"] == 200
+        assert len(responses.calls) == 1
+        payload = json.loads(responses.calls[0].request.body)
+        assert payload["event"] == "bounced"
 
     @mock_aws
     def test_returns_error_for_unknown_domain(self, monkeypatch):

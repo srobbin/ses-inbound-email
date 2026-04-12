@@ -7,6 +7,7 @@ from email_parser import parse_email
 from reply_stripper import strip_reply
 from attachment_handler import upload_attachments
 from config import get_domain_config, DomainNotConfiguredError
+from notification_handler import handle_bounce, handle_complaint
 from webhook_sender import send_webhook, WebhookDeliveryError
 
 logger = logging.getLogger()
@@ -15,8 +16,15 @@ logger.setLevel(logging.INFO)
 
 def lambda_handler(event, context):
     try:
-        # Extract S3 info from SNS > SES notification
         sns_message = json.loads(event["Records"][0]["Sns"]["Message"])
+        notification_type = sns_message.get("notificationType")
+
+        # Route bounce/complaint notifications to dedicated handlers
+        if notification_type == "Bounce":
+            return handle_bounce(sns_message)
+        if notification_type == "Complaint":
+            return handle_complaint(sns_message)
+
         logger.info(f"SES notification action: {json.dumps(sns_message['receipt']['action'])}")
 
         # The receipt.action reflects whichever action triggered this notification.
@@ -58,6 +66,7 @@ def lambda_handler(event, context):
 
         # Build webhook payload
         payload = {
+            "event": "inbound",
             "sender": parsed["sender"],
             "recipient": parsed["recipient"],
             "subject": parsed["subject"],

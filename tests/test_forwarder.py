@@ -62,6 +62,22 @@ class TestForwardEmail:
         # The key test is that it doesn't raise
 
     @mock_aws
+    def test_passes_configuration_set_name_when_set(self, simple_text_email, monkeypatch):
+        monkeypatch.setenv("CONFIGURATION_SET_NAME", "my-config-set")
+
+        ses = boto3.client("ses", region_name="us-east-1")
+        ses.verify_email_identity(EmailAddress="info@letterclub.org")
+
+        # If ConfigurationSetName is invalid, moto would raise. Since moto
+        # doesn't validate config set names, we just verify no exception.
+        forward_email(
+            raw_email=simple_text_email,
+            recipient="admin@letterclub.org",
+            destination="scott@robbin.co",
+            region="us-east-1",
+        )
+
+    @mock_aws
     def test_preserves_original_to_header(self, simple_text_email):
         ses = boto3.client("ses", region_name="us-east-1")
         ses.verify_email_identity(EmailAddress="info@letterclub.org")

@@ -78,6 +78,24 @@ Resources:
               StringEquals:
                 "AWS:SourceAccount": !Ref "AWS::AccountId"
 
+  SendingConfigurationSet:
+    Type: AWS::SES::ConfigurationSet
+    Properties:
+      Name: !Sub "${AWS::StackName}-sending"
+
+  BounceComplaintEventDestination:
+    Type: AWS::SES::ConfigurationSetEventDestination
+    Properties:
+      ConfigurationSetName: !Ref SendingConfigurationSet
+      EventDestination:
+        Name: bounce-complaint-to-sns
+        Enabled: true
+        MatchingEventTypes:
+          - bounce
+          - complaint
+        SnsDestination:
+          TopicARN: !Ref EmailNotificationTopic
+
   InboundEmailFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -88,6 +106,7 @@ Resources:
           DOMAIN_CONFIG: !Ref DomainConfig
           ATTACHMENT_BUCKET: !Ref AttachmentBucket
           INCOMING_EMAIL_BUCKET: !Ref IncomingEmailBucket
+          CONFIGURATION_SET_NAME: !Ref SendingConfigurationSet
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref IncomingEmailBucket
@@ -120,3 +139,7 @@ Outputs:
   FunctionArn:
     Description: Lambda function ARN
     Value: !GetAtt InboundEmailFunction.Arn
+
+  SendingConfigurationSetName:
+    Description: SES Configuration Set for tracking bounces and complaints
+    Value: !Ref SendingConfigurationSet
