@@ -47,8 +47,9 @@ class TestForwardEmail:
     @mock_aws
     def test_forwards_email_via_ses(self, simple_text_email):
         ses = boto3.client("ses", region_name="us-east-1")
-        # Verify sender identity (required by moto)
-        ses.verify_email_identity(EmailAddress="sender@example.com")
+        # forwarder.py sends from info@<recipient-domain>, so that identity
+        # is what needs to be verified in moto — not the original sender.
+        ses.verify_email_identity(EmailAddress="info@letterclub.org")
 
         forward_email(
             raw_email=simple_text_email,
@@ -63,7 +64,7 @@ class TestForwardEmail:
     @mock_aws
     def test_preserves_original_to_header(self, simple_text_email):
         ses = boto3.client("ses", region_name="us-east-1")
-        ses.verify_email_identity(EmailAddress="sender@example.com")
+        ses.verify_email_identity(EmailAddress="info@letterclub.org")
 
         import email as email_lib
         msg = email_lib.message_from_string(simple_text_email)
