@@ -7,7 +7,7 @@ s3_prefix = "ses-inbound-email"
 region = "us-east-1"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
-parameter_overrides = "DomainConfig='{\"letterclub.org\": {\"webhook_url\": \"https://letterclub.org/webhooks/ses/inbound\", \"forwards\": {\"admin|administrator|billing|contact|help|info|mail|moderator|hostmaster|newsletter|no-reply|noreply|notification|notifications|notify|postmaster|privacy|security|support|system|webmaster\": \"scott@robbin.co\"}}}'"
+parameter_overrides = "DomainConfig='{\"letterclub.org\": {\"webhook_url\": \"https://letterclub.org/webhooks/ses/inbound\", \"forwards\": {\"admin|administrator|billing|contact|help|info|mail|moderator|hostmaster|newsletter|no-reply|noreply|notification|notifications|notify|postmaster|privacy|security|support|system|webmaster\": \"scott@robbin.co\"}}}' AlertEmail=scott@robbin.co"
 
 [default.build.parameters]
 cached = true
