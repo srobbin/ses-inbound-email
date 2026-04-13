@@ -5,6 +5,15 @@ import logging
 
 logger = logging.getLogger()
 
+_ses_client = None
+
+
+def _get_ses_client(region: str):
+    global _ses_client
+    if _ses_client is None:
+        _ses_client = boto3.client("ses", region_name=region)
+    return _ses_client
+
 
 def check_forward(recipient: str, forwards: dict) -> str | None:
     """Check if recipient matches a forwarding pattern. Returns destination email or None."""
@@ -56,7 +65,7 @@ def forward_email(raw_email: str, recipient: str, destination: str, region: str)
     del msg["Reply-To"]
     msg["Reply-To"] = formataddr((original_name, original_from)) if original_name else original_from
 
-    ses = boto3.client("ses", region_name=region)
+    ses = _get_ses_client(region)
     send_kwargs = {
         "Source": source,
         "Destinations": [destination],

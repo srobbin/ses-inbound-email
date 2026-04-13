@@ -20,11 +20,14 @@ def _reset_cached_clients():
     """Reset module-level boto3 client caches so each moto test gets a fresh client."""
     import handler
     import attachment_handler
+    import forwarder
     handler._s3_client = None
     attachment_handler._s3_client = None
+    forwarder._ses_client = None
     yield
     handler._s3_client = None
     attachment_handler._s3_client = None
+    forwarder._ses_client = None
 
 
 @pytest.fixture
