@@ -10,6 +10,13 @@ Parameters:
     Description: >
       JSON mapping of domain to webhook config.
       Example: {"letterclub.org": {"webhook_url": "https://...", "signing_secret": "..."}}
+  AlertEmail:
+    Type: String
+    Description: Email address to receive operational alerts (DLQ notifications, etc.)
+    Default: ""
+
+Conditions:
+  HasAlertEmail: !Not [!Equals [!Ref AlertEmail, ""]]
 
 Globals:
   Function:
@@ -114,6 +121,37 @@ Resources:
         SnsDestination:
           TopicARN: !Ref EmailNotificationTopic
 
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${AWS::StackName}-alerts"
+
+  AlertEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlertEmail
+    Properties:
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+      TopicArn: !Ref AlertTopic
+
+  DLQAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-dlq-not-empty"
+      AlarmDescription: Messages in inbound email DLQ indicate processing failures
+      MetricName: ApproximateNumberOfMessagesVisible
+      Namespace: AWS/SQS
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt EmailDeadLetterQueue.QueueName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+
   EmailDeadLetterQueue:
     Type: AWS::SQS::Queue
     Properties:
@@ -203,6 +241,10 @@ Outputs:
   EmailDeadLetterQueueUrl:
     Description: DLQ URL for failed email processing
     Value: !Ref EmailDeadLetterQueue
+
+  AlertTopicArn:
+    Description: SNS topic ARN for operational alerts (subscribe to receive DLQ notifications)
+    Value: !Ref AlertTopic
 
   FunctionArn:
     Description: Lambda function ARN
