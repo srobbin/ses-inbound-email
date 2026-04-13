@@ -22,6 +22,15 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "${AWS::StackName}-incoming-emails"
+      NotificationConfiguration:
+        TopicConfigurations:
+          - Event: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: emails/
+            Topic: !Ref EmailNotificationTopic
       LifecycleConfiguration:
         Rules:
           - Id: DeleteOldEmails
@@ -77,6 +86,15 @@ Resources:
             Condition:
               StringEquals:
                 "AWS:SourceAccount": !Ref "AWS::AccountId"
+          - Sid: AllowS3Publish
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref EmailNotificationTopic
+            Condition:
+              ArnLike:
+                "aws:SourceArn": !GetAtt IncomingEmailBucket.Arn
 
   SendingConfigurationSet:
     Type: AWS::SES::ConfigurationSet
@@ -147,7 +165,6 @@ Resources:
         Variables:
           DOMAIN_CONFIG: !Ref DomainConfig
           ATTACHMENT_BUCKET: !Ref AttachmentBucket
-          INCOMING_EMAIL_BUCKET: !Ref IncomingEmailBucket
           CONFIGURATION_SET_NAME: !Ref SendingConfigurationSet
       Policies:
         - S3ReadPolicy:

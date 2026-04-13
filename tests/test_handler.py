@@ -6,22 +6,23 @@ from moto import mock_aws
 from handler import lambda_handler
 
 
-def make_sqs_event(message_id):
-    ses_notification = {
-        "notificationType": "Received",
-        "mail": {
-            "messageId": message_id,
-        },
-        "receipt": {
-            "action": {
-                "type": "SNS",
-                "topicArn": "arn:aws:sns:us-east-1:123456789:ses-inbound-email-notifications",
+def make_s3_event(bucket, key):
+    """Build an SQS event wrapping an SNS-wrapped S3 event notification."""
+    s3_event = {
+        "Records": [
+            {
+                "eventSource": "aws:s3",
+                "eventName": "ObjectCreated:Put",
+                "s3": {
+                    "bucket": {"name": bucket},
+                    "object": {"key": key},
+                },
             }
-        },
+        ]
     }
     sns_envelope = {
         "Type": "Notification",
-        "Message": json.dumps(ses_notification),
+        "Message": json.dumps(s3_event),
     }
     return {
         "Records": [
@@ -29,6 +30,17 @@ def make_sqs_event(message_id):
                 "body": json.dumps(sns_envelope),
             }
         ]
+    }
+
+
+def make_ses_notification_event(notification):
+    """Build an SQS event wrapping an SNS-wrapped SES notification (bounce/complaint)."""
+    sns_envelope = {
+        "Type": "Notification",
+        "Message": json.dumps(notification),
+    }
+    return {
+        "Records": [{"body": json.dumps(sns_envelope)}]
     }
 
 
@@ -49,13 +61,13 @@ class TestLambdaHandler:
         # Set up env
         monkeypatch.setenv("DOMAIN_CONFIG", json.dumps(domain_config))
         monkeypatch.setenv("ATTACHMENT_BUCKET", "ses-email-attachments")
-        monkeypatch.setenv("INCOMING_EMAIL_BUCKET", "ses-incoming-emails")
+
         monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
         # Mock webhook endpoint
         responses.add(responses.POST, "https://letterclub.org/webhooks/inbound", status=201)
 
-        event = make_sqs_event("abc123")
+        event = make_s3_event("ses-incoming-emails", "emails/abc123")
         result = lambda_handler(event, None)
 
         assert result["statusCode"] == 200
@@ -90,12 +102,12 @@ class TestLambdaHandler:
 
         monkeypatch.setenv("DOMAIN_CONFIG", json.dumps(domain_config))
         monkeypatch.setenv("ATTACHMENT_BUCKET", "ses-email-attachments")
-        monkeypatch.setenv("INCOMING_EMAIL_BUCKET", "ses-incoming-emails")
+
         monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
         responses.add(responses.POST, "https://letterclub.org/webhooks/inbound", status=201)
 
-        event = make_sqs_event("att123")
+        event = make_s3_event("ses-incoming-emails", "emails/att123")
         result = lambda_handler(event, None)
 
         assert result["statusCode"] == 200
@@ -128,13 +140,7 @@ class TestLambdaHandler:
                 "timestamp": "2026-04-12T12:00:00.000Z",
             },
         }
-        sns_envelope = {
-            "Type": "Notification",
-            "Message": json.dumps(bounce_notification),
-        }
-        event = {
-            "Records": [{"body": json.dumps(sns_envelope)}]
-        }
+        event = make_ses_notification_event(bounce_notification)
 
         result = lambda_handler(event, None)
 
@@ -164,10 +170,10 @@ class TestLambdaHandler:
 
         monkeypatch.setenv("DOMAIN_CONFIG", '{"letterclub.org": {"webhook_url": "https://letterclub.org/webhooks/inbound", "signing_secret": "secret"}}')
         monkeypatch.setenv("ATTACHMENT_BUCKET", "ses-email-attachments")
-        monkeypatch.setenv("INCOMING_EMAIL_BUCKET", "ses-incoming-emails")
+
         monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
-        event = make_sqs_event("unknown")
+        event = make_s3_event("ses-incoming-emails", "emails/unknown")
         result = lambda_handler(event, None)
 
         assert result["statusCode"] == 400
@@ -186,7 +192,7 @@ class TestLambdaHandler:
 
         monkeypatch.setenv("DOMAIN_CONFIG", json.dumps(domain_config))
         monkeypatch.setenv("ATTACHMENT_BUCKET", "ses-email-attachments")
-        monkeypatch.setenv("INCOMING_EMAIL_BUCKET", "ses-incoming-emails")
+
         monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
         # Simulate webhook returning 503
@@ -194,6 +200,6 @@ class TestLambdaHandler:
 
         from webhook_sender import WebhookDeliveryError
 
-        event = make_sqs_event("retry123")
+        event = make_s3_event("ses-incoming-emails", "emails/retry123")
         with pytest.raises(WebhookDeliveryError):
             lambda_handler(event, None)

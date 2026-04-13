@@ -19,22 +19,21 @@ def lambda_handler(event, context):
         # SQS wraps the SNS message: parse SQS body, then SNS Message
         sqs_body = json.loads(event["Records"][0]["body"])
         sns_message = json.loads(sqs_body["Message"])
-        notification_type = sns_message.get("notificationType")
 
         # Route bounce/complaint notifications to dedicated handlers
+        notification_type = sns_message.get("notificationType")
         if notification_type == "Bounce":
             return handle_bounce(sns_message)
         if notification_type == "Complaint":
             return handle_complaint(sns_message)
 
-        logger.info(f"SES notification action: {json.dumps(sns_message['receipt']['action'])}")
+        # Inbound emails arrive as S3 event notifications (triggered when
+        # SES writes the raw email to the incoming-email bucket).
+        s3_record = sns_message["Records"][0]["s3"]
+        email_bucket = s3_record["bucket"]["name"]
+        email_key = s3_record["object"]["key"]
 
-        # The receipt.action reflects whichever action triggered this notification.
-        # When the SNS action triggers the Lambda, it contains the SNS action type
-        # (not the S3 action). Construct the S3 key from mail.messageId instead.
-        mail_message_id = sns_message["mail"]["messageId"]
-        email_bucket = os.environ.get("INCOMING_EMAIL_BUCKET")
-        email_key = f"emails/{mail_message_id}"
+        logger.info(f"Processing email: s3://{email_bucket}/{email_key}")
 
         # Fetch raw email from S3
         region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
