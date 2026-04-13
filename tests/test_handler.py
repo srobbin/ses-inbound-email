@@ -4,44 +4,7 @@ import pytest
 import responses
 from moto import mock_aws
 from handler import lambda_handler
-
-
-def make_s3_event(bucket, key):
-    """Build an SQS event wrapping an SNS-wrapped S3 event notification."""
-    s3_event = {
-        "Records": [
-            {
-                "eventSource": "aws:s3",
-                "eventName": "ObjectCreated:Put",
-                "s3": {
-                    "bucket": {"name": bucket},
-                    "object": {"key": key},
-                },
-            }
-        ]
-    }
-    sns_envelope = {
-        "Type": "Notification",
-        "Message": json.dumps(s3_event),
-    }
-    return {
-        "Records": [
-            {
-                "body": json.dumps(sns_envelope),
-            }
-        ]
-    }
-
-
-def make_ses_notification_event(notification):
-    """Build an SQS event wrapping an SNS-wrapped SES notification (bounce/complaint)."""
-    sns_envelope = {
-        "Type": "Notification",
-        "Message": json.dumps(notification),
-    }
-    return {
-        "Records": [{"body": json.dumps(sns_envelope)}]
-    }
+from event_helpers import make_s3_event, make_ses_notification_event
 
 
 class TestLambdaHandler:
@@ -150,7 +113,8 @@ class TestLambdaHandler:
         assert payload["event"] == "bounced"
 
     @mock_aws
-    def test_returns_error_for_unknown_domain(self, monkeypatch):
+    def test_discards_email_for_unknown_domain(self, monkeypatch):
+        """Unknown domain returns 200 so SQS considers the message processed (no retries)."""
         s3 = boto3.client("s3", region_name="us-east-1")
         s3.create_bucket(Bucket="ses-incoming-emails")
         s3.create_bucket(Bucket="ses-email-attachments")
@@ -176,7 +140,7 @@ class TestLambdaHandler:
         event = make_s3_event("ses-incoming-emails", "emails/unknown")
         result = lambda_handler(event, None)
 
-        assert result["statusCode"] == 400
+        assert result["statusCode"] == 200
 
     @mock_aws
     @responses.activate
@@ -203,3 +167,82 @@ class TestLambdaHandler:
         event = make_s3_event("ses-incoming-emails", "emails/retry123")
         with pytest.raises(WebhookDeliveryError):
             lambda_handler(event, None)
+
+    @responses.activate
+    def test_routes_bounce_with_event_type_field(self, domain_config, monkeypatch):
+        """Configuration Set event destinations use 'eventType' instead of 'notificationType'."""
+        monkeypatch.setenv("DOMAIN_CONFIG", json.dumps(domain_config))
+        responses.add(responses.POST, "https://letterclub.org/webhooks/inbound", status=200)
+
+        bounce_notification = {
+            "eventType": "Bounce",
+            "mail": {
+                "source": "info@letterclub.org",
+                "messageId": "bounce-002",
+            },
+            "bounce": {
+                "bounceType": "Permanent",
+                "bounceSubType": "General",
+                "bouncedRecipients": [
+                    {"emailAddress": "user@example.com", "diagnosticCode": "550 unknown"}
+                ],
+                "timestamp": "2026-04-13T10:00:00.000Z",
+            },
+        }
+        event = make_ses_notification_event(bounce_notification)
+        result = lambda_handler(event, None)
+
+        assert result["statusCode"] == 200
+        payload = json.loads(responses.calls[0].request.body)
+        assert payload["event"] == "bounced"
+
+    @responses.activate
+    def test_routes_complaint_with_event_type_field(self, domain_config, monkeypatch):
+        """Configuration Set event destinations use 'eventType' instead of 'notificationType'."""
+        monkeypatch.setenv("DOMAIN_CONFIG", json.dumps(domain_config))
+        responses.add(responses.POST, "https://letterclub.org/webhooks/inbound", status=200)
+
+        complaint_notification = {
+            "eventType": "Complaint",
+            "mail": {
+                "source": "info@letterclub.org",
+                "messageId": "complaint-002",
+            },
+            "complaint": {
+                "complainedRecipients": [
+                    {"emailAddress": "user@example.com"}
+                ],
+                "complaintFeedbackType": "abuse",
+                "timestamp": "2026-04-13T10:00:00.000Z",
+            },
+        }
+        event = make_ses_notification_event(complaint_notification)
+        result = lambda_handler(event, None)
+
+        assert result["statusCode"] == 200
+        payload = json.loads(responses.calls[0].request.body)
+        assert payload["event"] == "complained"
+
+    def test_unknown_domain_bounce_is_discarded(self, monkeypatch):
+        """Bounce for unconfigured domain returns success to avoid SQS retries."""
+        monkeypatch.setenv("DOMAIN_CONFIG", '{"letterclub.org": {"webhook_url": "https://letterclub.org/webhooks/inbound", "signing_secret": "secret"}}')
+
+        bounce_notification = {
+            "notificationType": "Bounce",
+            "mail": {
+                "source": "info@unknown-domain.com",
+                "messageId": "bounce-003",
+            },
+            "bounce": {
+                "bounceType": "Permanent",
+                "bounceSubType": "General",
+                "bouncedRecipients": [
+                    {"emailAddress": "user@example.com"}
+                ],
+                "timestamp": "2026-04-13T10:00:00.000Z",
+            },
+        }
+        event = make_ses_notification_event(bounce_notification)
+        result = lambda_handler(event, None)
+
+        assert result["statusCode"] == 200

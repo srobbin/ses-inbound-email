@@ -4,33 +4,7 @@ import pytest
 import responses
 from moto import mock_aws
 from handler import lambda_handler
-
-
-def make_s3_event(bucket, key):
-    """Build an SQS event wrapping an SNS-wrapped S3 event notification."""
-    s3_event = {
-        "Records": [
-            {
-                "eventSource": "aws:s3",
-                "eventName": "ObjectCreated:Put",
-                "s3": {
-                    "bucket": {"name": bucket},
-                    "object": {"key": key},
-                },
-            }
-        ]
-    }
-    sns_envelope = {
-        "Type": "Notification",
-        "Message": json.dumps(s3_event),
-    }
-    return {
-        "Records": [
-            {
-                "body": json.dumps(sns_envelope),
-            }
-        ]
-    }
+from event_helpers import make_s3_event
 
 
 class TestHandlerForwarding:

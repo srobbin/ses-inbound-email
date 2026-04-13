@@ -20,8 +20,10 @@ def lambda_handler(event, context):
         sqs_body = json.loads(event["Records"][0]["body"])
         sns_message = json.loads(sqs_body["Message"])
 
-        # Route bounce/complaint notifications to dedicated handlers
-        notification_type = sns_message.get("notificationType")
+        # Route bounce/complaint notifications to dedicated handlers.
+        # SES receipt notifications use "notificationType"; Configuration Set
+        # event destinations use "eventType".  Both are uppercase values.
+        notification_type = sns_message.get("notificationType") or sns_message.get("eventType")
         if notification_type == "Bounce":
             return handle_bounce(sns_message)
         if notification_type == "Complaint":
@@ -88,5 +90,5 @@ def lambda_handler(event, context):
         return {"statusCode": 200, "body": "OK"}
 
     except DomainNotConfiguredError as e:
-        logger.warning(f"Domain not configured: {e}")
-        return {"statusCode": 400, "body": str(e)}
+        logger.warning(f"Domain not configured (message discarded): {e}")
+        return {"statusCode": 200, "body": str(e)}
