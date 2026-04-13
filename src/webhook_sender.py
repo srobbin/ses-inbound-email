@@ -25,7 +25,10 @@ def send_webhook(url: str, payload: dict, signing_secret: str) -> None:
         "X-Timestamp": timestamp,
     }
 
-    response = requests.post(url, data=body, headers=headers, timeout=30)
+    try:
+        response = requests.post(url, data=body, headers=headers, timeout=30)
+    except requests.RequestException as e:
+        raise WebhookDeliveryError(f"Webhook delivery failed: {e}") from e
 
     if not response.ok:
         raise WebhookDeliveryError(

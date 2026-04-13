@@ -13,6 +13,16 @@ from webhook_sender import send_webhook
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+# Reuse clients across warm Lambda invocations
+_s3_client = None
+
+
+def _get_s3_client(region: str):
+    global _s3_client
+    if _s3_client is None:
+        _s3_client = boto3.client("s3", region_name=region)
+    return _s3_client
+
 
 def lambda_handler(event, context):
     try:
@@ -39,9 +49,11 @@ def lambda_handler(event, context):
 
         # Fetch raw email from S3
         region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
-        s3 = boto3.client("s3", region_name=region)
+        s3 = _get_s3_client(region)
         response = s3.get_object(Bucket=email_bucket, Key=email_key)
-        raw_email = response["Body"].read().decode("utf-8")
+        # Use latin-1 which never fails — every byte is valid. Python's email
+        # parser handles RFC 2047 encoded-word headers from there.
+        raw_email = response["Body"].read().decode("latin-1")
 
         # Parse email
         parsed = parse_email(raw_email)

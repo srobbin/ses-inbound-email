@@ -83,17 +83,21 @@ class TestForwardEmail:
         ses.verify_email_identity(EmailAddress="info@letterclub.org")
 
         import email as email_lib
-        msg = email_lib.message_from_string(simple_text_email)
-        original_to = msg["To"]
+        original_to = email_lib.message_from_string(simple_text_email)["To"]
 
-        forward_email(
-            raw_email=simple_text_email,
-            recipient="admin@letterclub.org",
-            destination="scott@robbin.co",
-            region="us-east-1",
-        )
+        # Monkey-patch SES to capture the forwarded message
+        import unittest.mock as mock
+        with mock.patch("forwarder.boto3") as mock_boto3:
+            mock_ses = mock.MagicMock()
+            mock_boto3.client.return_value = mock_ses
 
-        # The original To header should remain unchanged in the message
-        # (only the envelope destination changes for routing)
-        msg_after = email_lib.message_from_string(simple_text_email)
-        assert msg_after["To"] == original_to
+            forward_email(
+                raw_email=simple_text_email,
+                recipient="admin@letterclub.org",
+                destination="scott@robbin.co",
+                region="us-east-1",
+            )
+
+            sent_raw = mock_ses.send_raw_email.call_args[1]["RawMessage"]["Data"]
+            forwarded_msg = email_lib.message_from_string(sent_raw)
+            assert forwarded_msg["To"] == original_to

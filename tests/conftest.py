@@ -15,6 +15,18 @@ import pytest
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
+@pytest.fixture(autouse=True)
+def _reset_cached_clients():
+    """Reset module-level boto3 client caches so each moto test gets a fresh client."""
+    import handler
+    import attachment_handler
+    handler._s3_client = None
+    attachment_handler._s3_client = None
+    yield
+    handler._s3_client = None
+    attachment_handler._s3_client = None
+
+
 @pytest.fixture
 def simple_text_email():
     msg = MIMEText("Hello, this is a test email.", "plain")

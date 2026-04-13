@@ -14,8 +14,12 @@ def check_forward(recipient: str, forwards: dict) -> str | None:
     local_part = recipient.split("@")[0] if "@" in recipient else recipient
 
     for pattern, destination in forwards.items():
-        if re.match(f"^({pattern})$", local_part, re.IGNORECASE):
-            return destination
+        try:
+            if re.match(f"^({pattern})$", local_part, re.IGNORECASE):
+                return destination
+        except re.error:
+            logger.warning(f"Invalid forwarding regex pattern: {pattern}")
+            continue
 
     return None
 

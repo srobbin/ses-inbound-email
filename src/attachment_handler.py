@@ -3,11 +3,21 @@ import boto3
 from botocore.config import Config
 
 
+_s3_client = None
+
+
+def _get_s3_client(region: str):
+    global _s3_client
+    if _s3_client is None:
+        _s3_client = boto3.client("s3", region_name=region, config=Config(signature_version="s3v4"))
+    return _s3_client
+
+
 def upload_attachments(attachments: list[dict], bucket: str, region: str) -> list[dict]:
     if not attachments:
         return []
 
-    s3 = boto3.client("s3", region_name=region, config=Config(signature_version="s3v4"))
+    s3 = _get_s3_client(region)
     results = []
 
     for attachment in attachments:
@@ -23,7 +33,7 @@ def upload_attachments(attachments: list[dict], bucket: str, region: str) -> lis
         url = s3.generate_presigned_url(
             "get_object",
             Params={"Bucket": bucket, "Key": key},
-            ExpiresIn=3600,
+            ExpiresIn=86400,
         )
 
         result = {
